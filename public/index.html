@@ -1,0 +1,1258 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>네이버 부동산 크롤러</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
+
+        .container {
+            max-width: 95%;
+            margin: 0 auto;
+            background: white;
+            border-radius: 20px;
+            box-shadow: 0 20px 40px rgba(0,0,0,0.1);
+            overflow: hidden;
+        }
+
+        .header {
+            background: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%);
+            color: white;
+            padding: 30px;
+            text-align: center;
+        }
+
+        .header h1 {
+            font-size: 2.5em;
+            margin-bottom: 10px;
+            font-weight: 300;
+        }
+
+        .header p {
+            font-size: 1.1em;
+            opacity: 0.9;
+        }
+
+        .content {
+            padding: 40px;
+            display: grid;
+            grid-template-columns: 1fr 2fr;
+            grid-template-rows: auto auto;
+            gap: 30px;
+            grid-template-areas: 
+                "form data"
+                "files files";
+        }
+
+        .form-section {
+            grid-area: form;
+        }
+
+        .data-section {
+            grid-area: data;
+        }
+
+        .files-section {
+            grid-area: files;
+        }
+
+        .form-group {
+            margin-bottom: 25px;
+        }
+
+        .form-group label {
+            display: block;
+            margin-bottom: 8px;
+            font-weight: 600;
+            color: #333;
+            font-size: 1.1em;
+        }
+
+        .form-group input, .form-group select {
+            width: 100%;
+            padding: 15px;
+            border: 2px solid #e1e5e9;
+            border-radius: 10px;
+            font-size: 1em;
+            transition: all 0.3s ease;
+        }
+
+        .form-group input:focus, .form-group select:focus {
+            outline: none;
+            border-color: #4facfe;
+            box-shadow: 0 0 0 3px rgba(79, 172, 254, 0.1);
+        }
+
+        .method-group {
+            display: flex;
+            gap: 20px;
+            margin-bottom: 25px;
+        }
+
+        .method-option {
+            flex: 1;
+            padding: 20px;
+            border: 2px solid #e1e5e9;
+            border-radius: 15px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            text-align: center;
+        }
+
+        .method-option:hover {
+            border-color: #4facfe;
+            background-color: #f8f9ff;
+        }
+
+        .method-option.selected {
+            border-color: #4facfe;
+            background-color: #e8f4fd;
+        }
+
+        .method-option input[type="radio"] {
+            margin-right: 10px;
+        }
+
+        .method-option h3 {
+            margin-bottom: 10px;
+            color: #333;
+        }
+
+        .method-option p {
+            color: #666;
+            font-size: 0.9em;
+        }
+
+        /* 키워드 검색 섹션 스타일 */
+        .search-section {
+            margin-bottom: 30px;
+            padding: 20px;
+            background: linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%);
+            border-radius: 12px;
+            border: 1px solid #dee2e6;
+        }
+        
+        .search-section h3 {
+            margin: 0 0 15px 0;
+            color: #495057;
+            font-size: 1.1em;
+        }
+        
+        .search-btn {
+            background: linear-gradient(135deg, #28a745 0%, #20c997 100%);
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 8px;
+            cursor: pointer;
+            font-weight: 600;
+            transition: all 0.3s ease;
+            margin-left: 10px;
+        }
+        
+        .search-btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(40, 167, 69, 0.3);
+        }
+        
+        .search-results {
+            margin-top: 20px;
+            padding: 15px;
+            background: white;
+            border-radius: 8px;
+            border: 1px solid #dee2e6;
+        }
+        
+        .search-results h4 {
+            margin: 0 0 15px 0;
+            color: #495057;
+            font-size: 1em;
+        }
+        
+        .search-stats {
+            background: #f8f9fa;
+            padding: 10px;
+            border-radius: 6px;
+            margin-bottom: 15px;
+            font-size: 0.9em;
+            color: #495057;
+        }
+        
+        .complex-list {
+            max-height: 300px;
+            overflow-y: auto;
+        }
+        
+        .complex-item {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 12px;
+            border: 1px solid #e9ecef;
+            border-radius: 6px;
+            margin-bottom: 8px;
+            background: white;
+            transition: all 0.2s ease;
+            cursor: pointer;
+        }
+        
+        .complex-item:hover {
+            background: #f8f9fa;
+            border-color: #007bff;
+            transform: translateY(-1px);
+        }
+        
+        .complex-info {
+            flex: 1;
+        }
+        
+        .complex-name {
+            font-weight: 600;
+            color: #212529;
+            margin-bottom: 4px;
+        }
+        
+        .complex-details {
+            font-size: 0.8em;
+            color: #6c757d;
+        }
+        
+        .complex-select-btn {
+            background: linear-gradient(135deg, #007bff 0%, #0056b3 100%);
+            color: white;
+            border: none;
+            padding: 6px 12px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 0.8em;
+            font-weight: 600;
+            transition: all 0.2s ease;
+        }
+        
+        .complex-select-btn:hover {
+            transform: scale(1.05);
+            box-shadow: 0 2px 8px rgba(0, 123, 255, 0.3);
+        }
+        
+        .direct-input-section {
+            padding: 20px;
+            background: linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%);
+            border-radius: 12px;
+            border: 1px solid #dee2e6;
+        }
+        
+        .direct-input-section h3 {
+            margin: 0 0 15px 0;
+            color: #495057;
+            font-size: 1.1em;
+        }
+
+        .btn {
+            background: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%);
+            color: white;
+            border: none;
+            padding: 15px 30px;
+            border-radius: 10px;
+            font-size: 1.1em;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            width: 100%;
+            margin-top: 20px;
+        }
+
+        .btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 10px 20px rgba(79, 172, 254, 0.3);
+        }
+
+        .btn:disabled {
+            background: #ccc;
+            cursor: not-allowed;
+            transform: none;
+            box-shadow: none;
+        }
+
+        .progress {
+            display: none;
+            margin-top: 20px;
+            padding: 20px;
+            background: #f8f9ff;
+            border-radius: 10px;
+            border-left: 4px solid #4facfe;
+        }
+
+        .progress.show {
+            display: block;
+        }
+
+        .progress-bar {
+            width: 100%;
+            height: 8px;
+            background: #e1e5e9;
+            border-radius: 4px;
+            overflow: hidden;
+            margin-bottom: 15px;
+        }
+
+        .progress-fill {
+            height: 100%;
+            background: linear-gradient(90deg, #4facfe 0%, #00f2fe 100%);
+            width: 0%;
+            transition: width 0.3s ease;
+        }
+
+        .progress-text {
+            color: #333;
+            font-weight: 500;
+        }
+
+        .result {
+            display: none;
+            margin-top: 20px;
+            padding: 20px;
+            background: #f0f8f0;
+            border-radius: 10px;
+            border-left: 4px solid #28a745;
+        }
+
+        .result.show {
+            display: block;
+        }
+
+        .result.error {
+            background: #fff5f5;
+            border-left-color: #dc3545;
+        }
+
+        .result h3 {
+            margin-bottom: 15px;
+            color: #333;
+        }
+
+        .result-info {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 15px;
+            margin-bottom: 20px;
+        }
+
+        .info-item {
+            background: white;
+            padding: 15px;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+
+        .info-item label {
+            display: block;
+            font-weight: 600;
+            color: #666;
+            margin-bottom: 5px;
+            font-size: 0.9em;
+        }
+
+        .info-item span {
+            color: #333;
+            font-size: 1.1em;
+        }
+
+        .download-btn {
+            background: linear-gradient(135deg, #28a745 0%, #20c997 100%);
+            color: white;
+            border: none;
+            padding: 12px 25px;
+            border-radius: 8px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            text-decoration: none;
+            display: inline-block;
+        }
+
+        .download-btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 8px 16px rgba(40, 167, 69, 0.3);
+        }
+
+        .files-section {
+            margin-top: 30px;
+            padding-top: 30px;
+            border-top: 2px solid #e1e5e9;
+        }
+
+        .files-section h3 {
+            margin-bottom: 20px;
+            color: #333;
+        }
+
+        .file-list {
+            display: grid;
+            gap: 10px;
+        }
+
+        .file-item {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 15px;
+            background: #f8f9fa;
+            border-radius: 8px;
+            border: 1px solid #e1e5e9;
+        }
+
+        .file-info {
+            flex: 1;
+        }
+
+        .file-name {
+            font-weight: 600;
+            color: #333;
+            margin-bottom: 5px;
+        }
+
+        .file-meta {
+            font-size: 0.9em;
+            color: #666;
+        }
+
+        .refresh-btn {
+            background: #6c757d;
+            color: white;
+            border: none;
+            padding: 8px 15px;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 0.9em;
+            margin-bottom: 15px;
+        }
+
+        .refresh-btn:hover {
+            background: #5a6268;
+        }
+
+        .preview-section {
+            margin-top: 25px;
+            padding-top: 25px;
+            border-top: 2px solid #e1e5e9;
+        }
+
+        .preview-section h4 {
+            margin-bottom: 15px;
+            color: #333;
+            font-size: 1.2em;
+        }
+
+        .preview-info {
+            background: #f8f9fa;
+            padding: 15px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+            font-size: 0.9em;
+            color: #666;
+        }
+
+        .table-container {
+            overflow: auto;
+            border-radius: 10px;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+            margin-bottom: 15px;
+            max-height: 500px;
+            max-width: 100%;
+            border: 1px solid #e1e5e9;
+        }
+
+        .table-container::-webkit-scrollbar {
+            width: 8px;
+            height: 8px;
+        }
+
+        .table-container::-webkit-scrollbar-track {
+            background: #f1f1f1;
+            border-radius: 4px;
+        }
+
+        .table-container::-webkit-scrollbar-thumb {
+            background: #c1c1c1;
+            border-radius: 4px;
+        }
+
+        .table-container::-webkit-scrollbar-thumb:hover {
+            background: #a8a8a8;
+        }
+
+        .data-table {
+            width: 100%;
+            border-collapse: collapse;
+            background: white;
+            font-size: 0.7em;
+            min-width: 1200px;
+        }
+
+        .data-table th {
+            background: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%);
+            color: white;
+            padding: 6px 4px;
+            text-align: left;
+            font-weight: 600;
+            position: sticky;
+            top: 0;
+            z-index: 10;
+            height: 20px;
+            line-height: 1.1;
+            font-size: 0.7em;
+        }
+
+        .data-table td {
+            padding: 3px 4px;
+            border-bottom: 1px solid #e1e5e9;
+            vertical-align: middle;
+            height: 20px;
+            line-height: 1.1;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            font-size: 0.7em;
+        }
+
+        .data-table tr:nth-child(even) {
+            background-color: #f8f9fa;
+        }
+
+        .data-table tr:hover {
+            background-color: #e8f4fd;
+        }
+
+        .preview-footer {
+            text-align: center;
+            color: #666;
+            font-size: 0.9em;
+            padding: 10px;
+            background: #f8f9fa;
+            border-radius: 8px;
+        }
+
+        @media (max-width: 1024px) {
+            .content {
+                grid-template-columns: 1fr;
+                grid-template-areas: 
+                    "form"
+                    "data"
+                    "files";
+            }
+            
+            .table-container {
+                max-height: 400px;
+                max-width: 100%;
+            }
+            
+            .data-table {
+                min-width: 1000px;
+            }
+        }
+
+        @media (max-width: 768px) {
+            .container {
+                margin: 5px;
+                border-radius: 15px;
+            }
+            
+            .content {
+                padding: 15px;
+                gap: 15px;
+            }
+            
+            .table-container {
+                max-height: 300px;
+                max-width: 100%;
+            }
+            
+            .data-table {
+                min-width: 800px;
+                font-size: 0.6em;
+            }
+            
+            .data-table th,
+            .data-table td {
+                padding: 2px 3px;
+                height: 18px;
+                font-size: 0.6em;
+            }
+        }
+
+        @media (max-width: 600px) {
+            .method-group {
+                flex-direction: column;
+            }
+            
+            .result-info {
+                grid-template-columns: 1fr;
+            }
+            
+            .table-container {
+                max-height: 250px;
+            }
+            
+            .data-table {
+                min-width: 700px;
+                font-size: 0.5em;
+            }
+            
+            .data-table th,
+            .data-table td {
+                padding: 1px 2px;
+                height: 16px;
+                font-size: 0.5em;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>🏠 네이버 부동산 크롤러</h1>
+            <p>간편하게 부동산 매물 정보를 수집하고 엑셀로 다운로드하세요</p>
+        </div>
+        
+        <div class="content">
+            <!-- 왼쪽: 입력 폼 섹션 -->
+            <div class="form-section">
+                <!-- 키워드 검색 섹션 -->
+                <div class="search-section">
+                    <h3>🔍 단지 검색</h3>
+                    <div class="form-group">
+                        <label for="searchKeyword">검색 키워드</label>
+                        <input type="text" id="searchKeyword" placeholder="예: 달서구, 대구, 강남구" value="달서구">
+                        <button class="search-btn" onclick="searchComplexes()">
+                            <span class="btn-icon">🔍</span>
+                            검색
+                        </button>
+                    </div>
+                    
+                    <div class="search-results" id="searchResults" style="display: none;">
+                        <h4>📋 검색 결과</h4>
+                        <div class="search-stats" id="searchStats"></div>
+                        <div class="complex-list" id="complexList"></div>
+                    </div>
+                </div>
+                
+                <!-- 직접 입력 섹션 -->
+                <div class="direct-input-section">
+                    <h3>🏢 직접 입력</h3>
+                    <form id="crawlForm">
+                        <div class="form-group">
+                            <label for="complexNo">단지번호 *</label>
+                            <input type="text" id="complexNo" name="complexNo" 
+                                   placeholder="예: 105389" required>
+                        </div>
+                        
+                        <div class="form-group">
+                            <label for="complexName">아파트명 (선택사항)</label>
+                            <input type="text" id="complexName" name="complexName" 
+                                   placeholder="예: 대곡역센트럴파크">
+                        </div>
+                    
+                    <div class="method-group" style="display: none;">
+                        <div class="method-option" onclick="selectMethod('direct-api')">
+                            <input type="radio" name="method" value="direct-api" checked>
+                            <h3>⚡ 직접 API 요청</h3>
+                            <p>빠른 속도의 직접 API 호출</p>
+                        </div>
+                    </div>
+                    
+                    <button type="submit" class="btn" id="crawlBtn">
+                        🚀 크롤링 시작
+                    </button>
+                </form>
+                
+                <div class="progress" id="progress">
+                    <div class="progress-bar">
+                        <div class="progress-fill" id="progressFill"></div>
+                    </div>
+                    <div class="progress-text" id="progressText">크롤링을 시작합니다...</div>
+                </div>
+                
+                <div class="result" id="result">
+                    <h3 id="resultTitle">크롤링 결과</h3>
+                    <div class="result-info" id="resultInfo"></div>
+                    <a href="#" class="download-btn" id="downloadBtn" style="display: none;">
+                        📥 엑셀 파일 다운로드
+                    </a>
+                </div>
+            </div>
+            
+            <!-- 오른쪽: 데이터 테이블 섹션 -->
+            <div class="data-section">
+                <div class="preview-section" id="previewSection">
+                    <h4>📊 수집된 매물 데이터</h4>
+                    <div class="preview-info" id="previewInfo">
+                        크롤링을 시작하면 여기에 매물 데이터가 표시됩니다.
+                    </div>
+                    <div class="table-container">
+                        <table class="data-table" id="dataTable">
+                            <thead id="tableHead">
+                                <tr>
+                                    <th>매물번호</th>
+                                    <th>매물명</th>
+                                    <th>상태</th>
+                                    <th>유형</th>
+                                    <th>거래</th>
+                                    <th>층</th>
+                                    <th>가격</th>
+                                    <th>면적</th>
+                                    <th>전용</th>
+                                    <th>공급</th>
+                                    <th>방향</th>
+                                    <th>확인일</th>
+                                    <th>동명</th>
+                                    <th>특징</th>
+                                    <th>중개사</th>
+                                    <th>업체</th>
+                                    <th>위도</th>
+                                    <th>경도</th>
+                                    <th>직거래</th>
+                                    <th>VR</th>
+                                </tr>
+                            </thead>
+                            <tbody id="tableBody">
+                                <tr>
+                                    <td colspan="20" style="text-align: center; color: #666; padding: 20px;">
+                                        아직 수집된 데이터가 없습니다. 단지번호를 입력하고 크롤링을 시작해주세요.
+                                    </td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                    <div class="preview-footer" id="previewFooter">
+                        데이터가 없습니다. 크롤링을 시작해주세요.
+                    </div>
+                </div>
+            </div>
+            
+            <!-- 아래쪽: 파일 목록 섹션 -->
+            <div class="files-section">
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
+                    <h3>📁 생성된 파일 목록</h3>
+                    <div style="display: flex; gap: 10px;">
+                        <button class="refresh-btn" onclick="loadFiles()">🔄 새로고침</button>
+                        <button class="refresh-btn" onclick="openDirectory()" style="background: linear-gradient(135deg, #28a745 0%, #20c997 100%); color: white;">
+                            📂 폴더 열기
+                        </button>
+                    </div>
+                </div>
+                <div class="file-list" id="fileList">
+                    <div style="text-align: center; color: #666; padding: 20px;">
+                        파일 목록을 불러오는 중...
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let selectedMethod = 'direct-api';
+        
+        function selectMethod(method) {
+            selectedMethod = method;
+            document.querySelectorAll('.method-option').forEach(option => {
+                option.classList.remove('selected');
+            });
+            event.currentTarget.classList.add('selected');
+            document.querySelector(`input[value="${method}"]`).checked = true;
+        }
+        
+        document.getElementById('crawlForm').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            
+            const complexNo = document.getElementById('complexNo').value.trim();
+            const complexName = document.getElementById('complexName').value.trim();
+            
+            if (!complexNo) {
+                alert('단지번호를 입력해주세요.');
+                return;
+            }
+            
+            // UI 상태 변경
+            const crawlBtn = document.getElementById('crawlBtn');
+            const progress = document.getElementById('progress');
+            const result = document.getElementById('result');
+            
+            crawlBtn.disabled = true;
+            crawlBtn.textContent = '⏳ 크롤링 중...';
+            progress.classList.add('show');
+            result.classList.remove('show');
+            
+            // 진행률 애니메이션
+            updateProgress(0, '크롤링을 시작합니다...');
+            
+            try {
+                const response = await fetch('/api/crawl', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        complexNo,
+                        complexName,
+                        method: selectedMethod
+                    })
+                });
+                
+                const data = await response.json();
+                
+                updateProgress(100, '크롤링이 완료되었습니다!');
+                
+                setTimeout(() => {
+                    showResult(data);
+                    loadFiles(); // 파일 목록 새로고침
+                }, 1000);
+                
+            } catch (error) {
+                console.error('크롤링 오류:', error);
+                showResult({
+                    success: false,
+                    error: '크롤링 중 오류가 발생했습니다: ' + error.message
+                });
+            } finally {
+                crawlBtn.disabled = false;
+                crawlBtn.textContent = '🚀 크롤링 시작';
+            }
+        });
+        
+        function updateProgress(percent, text) {
+            document.getElementById('progressFill').style.width = percent + '%';
+            document.getElementById('progressText').textContent = text;
+        }
+        
+        function showResult(data) {
+            const result = document.getElementById('result');
+            const resultTitle = document.getElementById('resultTitle');
+            const resultInfo = document.getElementById('resultInfo');
+            const downloadBtn = document.getElementById('downloadBtn');
+            const previewSection = document.getElementById('previewSection');
+            
+            if (data.success) {
+                resultTitle.textContent = '✅ 크롤링 성공!';
+                result.classList.remove('error');
+                
+                resultInfo.innerHTML = `
+                    <div class="info-item">
+                        <label>크롤링 방법</label>
+                        <span>직접 API 요청</span>
+                    </div>
+                    <div class="info-item">
+                        <label>수집된 데이터</label>
+                        <span>${data.dataCount}개 매물</span>
+                    </div>
+                    <div class="info-item">
+                        <label>생성된 파일</label>
+                        <span>${data.fileName}</span>
+                    </div>
+                `;
+                
+                if (data.fileName) {
+                    downloadBtn.href = `/api/download/${data.fileName}`;
+                    downloadBtn.style.display = 'inline-block';
+                    
+                    // 크롤링된 JSON 데이터를 바로 테이블로 표시
+                    if (data.articles && data.articles.length > 0) {
+                        showCrawledData(data.articles);
+                    }
+                }
+            } else {
+                resultTitle.textContent = '❌ 크롤링 실패';
+                result.classList.add('error');
+                
+                resultInfo.innerHTML = `
+                    <div class="info-item">
+                        <label>오류 메시지</label>
+                        <span>${data.error || '알 수 없는 오류가 발생했습니다.'}</span>
+                    </div>
+                `;
+                
+                downloadBtn.style.display = 'none';
+                previewSection.style.display = 'none';
+            }
+            
+            result.classList.add('show');
+        }
+        
+        function showCrawledData(articles) {
+            const previewSection = document.getElementById('previewSection');
+            const previewInfo = document.getElementById('previewInfo');
+            const tableHead = document.getElementById('tableHead');
+            const tableBody = document.getElementById('tableBody');
+            const previewFooter = document.getElementById('previewFooter');
+            
+            // 미리보기 정보 표시
+            previewInfo.innerHTML = `
+                <strong>수집된 매물:</strong> ${articles.length}개 | 
+                <strong>표시:</strong> ${articles.length}개 행 (스크롤로 전체 확인 가능)
+            `;
+            
+            // 테이블 헤더 생성 (실제 API 필드에 맞게)
+            const headers = [
+                '매물번호', '매물명', '상태', '유형', '거래', 
+                '층', '가격', '면적', '전용', '공급', 
+                '방향', '확인일', '동명', '특징', '중개사', 
+                '업체', '위도', '경도', '직거래', 'VR'
+            ];
+            
+            tableHead.innerHTML = `
+                <tr>
+                    ${headers.map(header => `<th>${header}</th>`).join('')}
+                </tr>
+            `;
+            
+            // 테이블 바디 생성 (모든 데이터 표시)
+            const displayArticles = articles;
+            tableBody.innerHTML = displayArticles.map(article => `
+                <tr>
+                    <td>${article.articleNo || ''}</td>
+                    <td>${article.articleName || ''}</td>
+                    <td>${article.articleStatus || ''}</td>
+                    <td>${article.realEstateTypeName || ''}</td>
+                    <td>${article.tradeTypeName || ''}</td>
+                    <td>${article.floorInfo || ''}</td>
+                    <td>${article.dealOrWarrantPrc || ''}</td>
+                    <td>${article.areaName || ''}</td>
+                    <td>${article.area1 || ''}</td>
+                    <td>${article.area2 || ''}</td>
+                    <td>${article.direction || ''}</td>
+                    <td>${article.articleConfirmYmd || ''}</td>
+                    <td>${article.buildingName || ''}</td>
+                    <td>${article.articleFeatureDesc || ''}</td>
+                    <td>${article.realtorName || ''}</td>
+                    <td>${article.cpName || ''}</td>
+                    <td>${article.latitude || ''}</td>
+                    <td>${article.longitude || ''}</td>
+                    <td>${article.isDirectTrade ? 'Y' : 'N'}</td>
+                    <td>${article.isVrExposed ? 'Y' : 'N'}</td>
+                </tr>
+            `).join('');
+            
+            // 푸터 정보
+            previewFooter.innerHTML = `
+                모든 매물 데이터가 표시되었습니다. (총 ${articles.length}개) 스크롤하여 전체 데이터를 확인하세요.
+            `;
+            
+            // 미리보기 섹션 표시
+            previewSection.style.display = 'block';
+        }
+        
+        async function loadFiles() {
+            try {
+                const response = await fetch('/api/files');
+                const data = await response.json();
+                
+                const fileList = document.getElementById('fileList');
+                
+                if (data.files && data.files.length > 0) {
+                    fileList.innerHTML = data.files.map(file => `
+                        <div class="file-item">
+                            <div class="file-info">
+                                <div class="file-name">${file.name}</div>
+                                <div class="file-meta">
+                                    크기: ${formatFileSize(file.size)} | 
+                                    생성: ${formatDate(file.created)} | 
+                                    수정: ${formatDate(file.modified)}
+                                </div>
+                            </div>
+                            <a href="/api/download/${file.name}" class="download-btn">
+                                📥 다운로드
+                            </a>
+                        </div>
+                    `).join('');
+                } else {
+                    fileList.innerHTML = `
+                        <div style="text-align: center; color: #666; padding: 20px;">
+                            생성된 파일이 없습니다.
+                        </div>
+                    `;
+                }
+            } catch (error) {
+                console.error('파일 목록 로드 오류:', error);
+                document.getElementById('fileList').innerHTML = `
+                    <div style="text-align: center; color: #dc3545; padding: 20px;">
+                        파일 목록을 불러올 수 없습니다.
+                    </div>
+                `;
+            }
+        }
+        
+        function formatFileSize(bytes) {
+            if (bytes === 0) return '0 Bytes';
+            const k = 1024;
+            const sizes = ['Bytes', 'KB', 'MB', 'GB'];
+            const i = Math.floor(Math.log(bytes) / Math.log(k));
+            return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
+        }
+        
+        function formatDate(dateString) {
+            const date = new Date(dateString);
+            return date.toLocaleString('ko-KR', {
+                year: 'numeric',
+                month: '2-digit',
+                day: '2-digit',
+                hour: '2-digit',
+                minute: '2-digit'
+            });
+        }
+        
+        async function openDirectory() {
+            try {
+                // 버튼 비활성화
+                const button = event.target;
+                const originalText = button.textContent;
+                button.disabled = true;
+                button.textContent = '⏳ 열기 중...';
+                
+                const response = await fetch('/api/open-directory', {
+                    method: 'POST'
+                });
+                
+                const data = await response.json();
+                
+                if (response.ok && data.success) {
+                    // 성공 메시지 표시
+                    showNotification('✅ 폴더가 성공적으로 열렸습니다!', 'success');
+                } else {
+                    showNotification('❌ 폴더를 열 수 없습니다. 수동으로 프로젝트 폴더를 확인해주세요.', 'error');
+                }
+            } catch (error) {
+                console.error('폴더 열기 오류:', error);
+                showNotification('❌ 폴더를 열 수 없습니다. 수동으로 프로젝트 폴더를 확인해주세요.', 'error');
+            } finally {
+                // 버튼 복원
+                const button = event.target;
+                button.disabled = false;
+                button.textContent = originalText;
+            }
+        }
+        
+        function showNotification(message, type = 'info') {
+            // 기존 알림 제거
+            const existingNotification = document.querySelector('.notification');
+            if (existingNotification) {
+                existingNotification.remove();
+            }
+            
+            // 새 알림 생성
+            const notification = document.createElement('div');
+            notification.className = `notification notification-${type}`;
+            notification.textContent = message;
+            
+            // 스타일 적용
+            notification.style.cssText = `
+                position: fixed;
+                top: 20px;
+                right: 20px;
+                padding: 15px 20px;
+                border-radius: 8px;
+                color: white;
+                font-weight: 600;
+                z-index: 10000;
+                box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+                animation: slideIn 0.3s ease-out;
+                max-width: 300px;
+                word-wrap: break-word;
+            `;
+            
+            // 타입별 색상
+            if (type === 'success') {
+                notification.style.background = 'linear-gradient(135deg, #28a745 0%, #20c997 100%)';
+            } else if (type === 'error') {
+                notification.style.background = 'linear-gradient(135deg, #dc3545 0%, #c82333 100%)';
+            } else {
+                notification.style.background = 'linear-gradient(135deg, #17a2b8 0%, #138496 100%)';
+            }
+            
+            // 애니메이션 CSS 추가
+            if (!document.querySelector('#notification-styles')) {
+                const style = document.createElement('style');
+                style.id = 'notification-styles';
+                style.textContent = `
+                    @keyframes slideIn {
+                        from {
+                            transform: translateX(100%);
+                            opacity: 0;
+                        }
+                        to {
+                            transform: translateX(0);
+                            opacity: 1;
+                        }
+                    }
+                    @keyframes slideOut {
+                        from {
+                            transform: translateX(0);
+                            opacity: 1;
+                        }
+                        to {
+                            transform: translateX(100%);
+                            opacity: 0;
+                        }
+                    }
+                `;
+                document.head.appendChild(style);
+            }
+            
+            document.body.appendChild(notification);
+            
+            // 3초 후 자동 제거
+            setTimeout(() => {
+                notification.style.animation = 'slideOut 0.3s ease-in';
+                setTimeout(() => {
+                    if (notification.parentNode) {
+                        notification.remove();
+                    }
+                }, 300);
+            }, 3000);
+        }
+        
+        // 키워드 검색 함수
+        async function searchComplexes() {
+            const keyword = document.getElementById('searchKeyword').value.trim();
+            if (!keyword) {
+                alert('검색 키워드를 입력해주세요.');
+                return;
+            }
+
+            const searchBtn = event.target;
+            const originalText = searchBtn.textContent;
+            searchBtn.disabled = true;
+            searchBtn.textContent = '⏳ 검색 중...';
+
+            try {
+                const response = await fetch('/api/search-keyword', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({ keyword })
+                });
+
+                const data = await response.json();
+
+                if (data.success) {
+                    showSearchResults(data);
+                } else {
+                    showNotification(`❌ 검색 실패: ${data.error}`, 'error');
+                }
+            } catch (error) {
+                console.error('검색 오류:', error);
+                showNotification('❌ 검색 중 오류가 발생했습니다.', 'error');
+            } finally {
+                searchBtn.disabled = false;
+                searchBtn.textContent = originalText;
+            }
+        }
+
+        // 검색 결과 표시
+        function showSearchResults(data) {
+            const searchResults = document.getElementById('searchResults');
+            const searchStats = document.getElementById('searchStats');
+            const complexList = document.getElementById('complexList');
+
+            // 통계 정보 표시
+            const complexes = data.complexes || [];
+            const regions = data.regions || [];
+            
+            let statsText = `검색 키워드: ${data.keyword}\n`;
+            statsText += `총 결과 수: ${data.totalCount}\n`;
+            statsText += `단지 수: ${complexes.length}\n`;
+            statsText += `지역 수: ${regions.length}\n`;
+            statsText += `더보기 가능: ${data.isMoreData ? '예' : '아니오'}\n\n`;
+
+            if (complexes.length > 0) {
+                // 부동산 유형별 분포
+                const typeDist = {};
+                let totalHouseholds = 0;
+                let tourAvailable = 0;
+                const complexNumbers = [];
+
+                complexes.forEach(complex => {
+                    const typeName = complex.realEstateTypeName || '';
+                    typeDist[typeName] = (typeDist[typeName] || 0) + 1;
+                    totalHouseholds += complex.totalHouseholdCount || 0;
+                    if (complex.tourExist) {
+                        tourAvailable++;
+                    }
+                    const complexNo = complex.complexNo || '';
+                    if (complexNo && complexNo.toString().match(/^\d+$/)) {
+                        complexNumbers.push(parseInt(complexNo));
+                    }
+                });
+
+                statsText += `부동산 유형별 분포: ${JSON.stringify(typeDist)}\n`;
+                statsText += `평균 총세대수: ${(totalHouseholds / complexes.length).toFixed(1)}세대\n`;
+                statsText += `투어 가능 단지: ${tourAvailable}개 (${(tourAvailable / complexes.length * 100).toFixed(1)}%)\n`;
+                
+                if (complexNumbers.length > 0) {
+                    statsText += `단지번호 범위: ${Math.min(...complexNumbers)} ~ ${Math.max(...complexNumbers)}\n`;
+                }
+            }
+
+            searchStats.textContent = statsText;
+
+            // 단지 목록 표시
+            complexList.innerHTML = complexes.map(complex => `
+                <div class="complex-item" onclick="selectComplex('${complex.complexNo}', '${complex.complexName}')">
+                    <div class="complex-info">
+                        <div class="complex-name">${complex.complexName || '이름 없음'}</div>
+                        <div class="complex-details">
+                            단지번호: ${complex.complexNo || '-'} | 
+                            주소: ${complex.cortarAddress || '-'} | 
+                            유형: ${complex.realEstateTypeName || '-'} | 
+                            세대수: ${complex.totalHouseholdCount || 0}세대 | 
+                            층수: ${complex.lowFloor || 0}-${complex.highFloor || 0}층 | 
+                            면적: ${complex.minSupplyArea || 0}-${complex.maxSupplyArea || 0}㎡ | 
+                            투어: ${complex.tourExist ? '가능' : '불가능'}
+                        </div>
+                    </div>
+                    <button class="complex-select-btn" onclick="event.stopPropagation(); selectComplex('${complex.complexNo}', '${complex.complexName}')">
+                        선택
+                    </button>
+                </div>
+            `).join('');
+
+            searchResults.style.display = 'block';
+            showNotification(`✅ ${complexes.length}개 단지를 찾았습니다!`, 'success');
+        }
+
+        // 단지 선택 함수
+        function selectComplex(complexNo, complexName) {
+            // 직접 입력 필드에 값 설정
+            document.getElementById('complexNo').value = complexNo;
+            document.getElementById('complexName').value = complexName;
+            
+            // 검색 결과 섹션 숨기기
+            document.getElementById('searchResults').style.display = 'none';
+            
+            showNotification(`✅ "${complexName}" 단지가 선택되었습니다!`, 'success');
+            
+            // 선택된 단지로 스크롤
+            document.querySelector('.direct-input-section').scrollIntoView({ 
+                behavior: 'smooth', 
+                block: 'start' 
+            });
+        }
+
+        // 페이지 로드 시 파일 목록 불러오기
+        document.addEventListener('DOMContentLoaded', () => {
+            loadFiles();
+        });
+    </script>
+</body>
+</html>
