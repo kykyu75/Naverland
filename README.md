@@ -93,7 +93,7 @@ npm install
 
 ## 🎯 실행 방법
 
-### 웹 서버 시작
+### 로컬 실행
 
 ```bash
 # 방법 1: npm 스크립트 사용 (권장)
@@ -102,9 +102,25 @@ npm run web
 # 방법 2: 직접 실행
 node web-server.js
 
-# 방법 3: 개발 모드
-npm run dev
+# 방법 3: Windows 배치 파일 사용 (Windows만)
+start-web.bat
 ```
+
+### Vercel 배포
+
+```bash
+# 1. GitHub에 푸시
+git add .
+git commit -m "Deploy to Vercel"
+git push origin main
+
+# 2. Vercel에 연결
+# - https://vercel.com 접속
+# - GitHub 저장소 연결
+# - 자동으로 배포됨
+```
+
+**주의**: Vercel 환경에서는 Playwright 브라우저 자동화가 작동하지 않으며, Direct API 방식만 사용됩니다.
 
 ### 브라우저에서 접속
 
@@ -221,6 +237,16 @@ Naver_Write/
 
 ---
 
-**🎉 설치가 완료되면 `npm run web` 명령어로 웹 서버를 시작하고 브라우저에서 `http://localhost:3000`에 접속하세요!**
+## 💡 실행 팁
+
+### Windows 사용자
+- 가장 간단한 방법: 프로젝트 폴더에서 `start-web.bat` 파일을 더블클릭
+- 바탕화면에 바로가기 만들어두면 편리함
+
+### 모든 운영체제
+- `npm run web` 명령어로 웹 서버 시작
+- 브라우저에서 `http://localhost:3000` 접속
+
+**🎉 설치가 완료되면 웹 서버를 시작하고 브라우저에서 `http://localhost:3000`에 접속하세요!**
 
 # NCrawler

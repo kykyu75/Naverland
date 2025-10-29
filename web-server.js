@@ -322,7 +322,7 @@ app.post('/api/open-directory', (req, res) => {
 });
 
 // 서버 시작
-app.listen(PORT, () => {
+const server = app.listen(PORT, () => {
   console.log(`🌐 네이버 부동산 크롤러 웹 서버가 시작되었습니다!`);
   console.log(`📱 브라우저에서 http://localhost:${PORT} 를 열어주세요`);
   console.log(`⏹️  서버를 중지하려면 Ctrl+C를 누르세요`);
