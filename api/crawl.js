@@ -1,9 +1,63 @@
-import DirectAPICrawler from '../direct-api-crawler.js';
+import * as XLSX from 'xlsx';
+import fs from 'fs';
+import https from 'https';
+
+const cookies = {
+  'NNB': 'PWIJR7Q3QCQGO',
+  'nstore_session': '4Y8GSqcQwQkpJcWHlbbNO5yj',
+  'nstore_pagesession': 'iISgglqlKcnNPlsMiwh-038404',
+  'ASID': '77c9d40200000194ddcdc61300000052'
+};
+
+async function fetchNaverAPI(complexNo, page = 1) {
+  const baseURL = 'https://new.land.naver.com/api/articles/complex/';
+  const params = {
+    realEstateType: 'APT:PRE',
+    tradeType: 'A1',
+    tag: '::::::::',
+    rentPriceMin: '0',
+    rentPriceMax: '900000000',
+    priceMin: '0',
+    priceMax: '900000000',
+    areaMin: '0',
+    areaMax: '900000000',
+    showArticle: 'true',
+    sameAddressGroup: 'true',
+    priceType: 'RETAIL',
+    directions: '',
+    complexNo: complexNo,
+    buildingNos: '',
+    areaNos: '',
+    type: 'list',
+    order: 'rank',
+    page: page.toString()
+  };
+
+  const url = `${baseURL}${complexNo}?${new URLSearchParams(params).toString()}`;
+  
+  const headers = {
+    'accept': '*/*',
+    'accept-language': 'ko-KR,ko;q=0.9,en-US;q=0.8,en;q=0.7',
+    'user-agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/141.0.0.0 Safari/537.36',
+    'Cookie': Object.entries(cookies).map(([key, value]) => `${key}=${value}`).join('; ')
+  };
+
+  try {
+    const response = await fetch(url, { headers });
+    if (!response.ok) {
+      throw new Error(`HTTP error! status: ${response.status}`);
+    }
+    return await response.json();
+  } catch (error) {
+    console.error('API 요청 실패:', error);
+    return null;
+  }
+}
 
 export default async function handler(req, res) {
   // CORS 설정
   res.setHeader('Access-Control-Allow-Origin', '*');
-  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
+  res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
 
   if (req.method === 'OPTIONS') {
@@ -11,7 +65,7 @@ export default async function handler(req, res) {
   }
 
   try {
-    const { complexNo, complexName, method = 'direct-api' } = req.body;
+    const { complexNo, complexName } = req.body;
     
     if (!complexNo) {
       return res.status(400).json({ 
@@ -20,29 +74,30 @@ export default async function handler(req, res) {
       });
     }
 
-    console.log(`크롤링 시작: 단지번호 ${complexNo}, 방법: ${method}`);
+    console.log(`크롤링 시작: 단지번호 ${complexNo}`);
     
-    // Direct API만 사용 (Playwright는 serverless에서 불가능)
-    const apiCrawler = new DirectAPICrawler();
-    const data = await apiCrawler.crawlDirectAPI(complexNo);
-    
-    // 수집된 매물 데이터 추출
-    const articles = [];
-    for (const apiData of data) {
-      if (apiData.data && apiData.data.articleList && Array.isArray(apiData.data.articleList)) {
-        articles.push(...apiData.data.articleList);
+    // 여러 페이지에서 데이터 수집
+    const allArticles = [];
+    for (let page = 1; page <= 5; page++) {
+      const data = await fetchNaverAPI(complexNo, page);
+      if (data && data.articleList && Array.isArray(data.articleList)) {
+        allArticles.push(...data.articleList);
+        console.log(`페이지 ${page}: ${data.articleList.length}개 매물 수집`);
+        
+        // 더 이상 데이터가 없으면 중단
+        if (!data.isMoreData || data.articleList.length === 0) {
+          break;
+        }
       }
+      // 요청 간 대기
+      await new Promise(resolve => setTimeout(resolve, 1000));
     }
     
-    // Vercel에서 파일 저장 시 /tmp 사용
-    const fs = await import('fs');
-    const path = await import('path');
+    console.log(`총 수집된 매물: ${allArticles.length}개`);
     
-    // /tmp 디렉토리는 writable
-    const tmpDir = '/tmp';
+    // 파일명 생성
     const today = new Date();
     const dateStr = today.toISOString().split('T')[0];
-    
     let fileName;
     if (complexName && complexName.trim()) {
       const cleanName = complexName.replace(/[<>:"/\\|?*]/g, '').trim();
@@ -51,12 +106,8 @@ export default async function handler(req, res) {
       fileName = `naver-land-${complexNo}-${dateStr}.xlsx`;
     }
     
-    const filePath = path.join(tmpDir, fileName);
-    const xlsx = await import('xlsx');
-    
     // 엑셀 파일 생성
-    const workbook = xlsx.utils.book_new();
-    const excelData = articles.map(article => ({
+    const excelData = allArticles.map(article => ({
       '매물번호': article.articleNo || '',
       '매물명': article.articleName || '',
       '매물상태': article.articleStatus || '',
@@ -90,27 +141,28 @@ export default async function handler(req, res) {
       '수집시간': new Date().toISOString()
     }));
     
-    const worksheet = xlsx.utils.json_to_sheet(excelData);
+    const workbook = XLSX.utils.book_new();
+    const worksheet = XLSX.utils.json_to_sheet(excelData);
     const colWidths = Array(Object.keys(excelData[0] || {}).length).fill({ wch: 15 });
     worksheet['!cols'] = colWidths;
-    xlsx.utils.book_append_sheet(workbook, worksheet, '매물');
+    XLSX.utils.book_append_sheet(workbook, worksheet, '매물');
     
-    xlsx.writeFile(workbook, filePath);
+    // /tmp에 파일 저장
+    const filePath = `/tmp/${fileName}`;
+    XLSX.writeFile(workbook, filePath);
     
-    console.log(`엑셀 파일이 저장되었습니다: ${filePath}`);
-    
-    // 파일을 base64로 인코딩하여 반환
+    // 파일을 base64로 인코딩
     const fileBuffer = fs.readFileSync(filePath);
     const base64File = fileBuffer.toString('base64');
     
     return res.json({
       success: true,
       method: 'direct-api',
-      dataCount: articles.length,
+      dataCount: allArticles.length,
       fileName: fileName,
-      fileData: base64File, // base64 인코딩된 파일 데이터
+      fileData: base64File,
       fileType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-      articles: articles,
+      articles: allArticles,
       message: '직접 API 크롤링이 완료되었습니다.'
     });
     
@@ -122,4 +174,3 @@ export default async function handler(req, res) {
     });
   }
 }
-
