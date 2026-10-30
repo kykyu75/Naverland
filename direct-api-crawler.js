@@ -185,7 +185,7 @@ class DirectAPICrawler {
         }
         
         // 요청 간 대기 (429 오류 방지)
-        await new Promise(resolve => setTimeout(resolve, 3000));
+        await new Promise(resolve => setTimeout(resolve, 200));
       }
       
       console.log(`총 수집된 API 요청: ${this.collectedData.length}개`);
@@ -197,8 +197,8 @@ class DirectAPICrawler {
     }
   }
 
-  // 데이터를 엑셀로 변환
-  async saveToExcel(complexNo, complexName = '') {
+  // 데이터를 엑셀 버퍼로 변환 (파일 저장 안함)
+  async createExcelBuffer(complexNo, complexName = '') {
     console.log('데이터를 엑셀로 변환합니다...');
     
     // 파일명 생성 (단지 이름 우선, 없으면 단지번호 사용)
@@ -254,20 +254,8 @@ class DirectAPICrawler {
       fileName = `naver-land-${complexNo}-${dateStr}.xlsx`;
     }
     
-    let workbook;
+    let workbook = XLSX.utils.book_new();
     const sheetName = `단지_${complexNo}`;
-    
-    if (fs.existsSync(fileName)) {
-      try {
-        workbook = XLSX.readFile(fileName);
-        console.log(`기존 엑셀 파일을 로드했습니다: ${fileName}`);
-      } catch (error) {
-        console.warn('기존 엑셀 파일을 읽을 수 없습니다. 새 파일을 생성합니다.');
-        workbook = XLSX.utils.book_new();
-      }
-    } else {
-      workbook = XLSX.utils.book_new();
-    }
     
     // 매물 데이터 처리 - 모든 매물을 하나의 시트에 저장
     const allArticles = [];
@@ -320,23 +308,12 @@ class DirectAPICrawler {
         '수집시간': article.timestamp || ''
       }));
       
-      // 기존 시트가 있으면 데이터 추가, 없으면 새로 생성
-      if (workbook.Sheets[sheetName]) {
-        const existingSheet = workbook.Sheets[sheetName];
-        const existingData = XLSX.utils.sheet_to_json(existingSheet);
-        const combinedData = [...existingData, ...excelData];
-        const worksheet = XLSX.utils.json_to_sheet(combinedData);
-        const colWidths = Array(Object.keys(combinedData[0]).length).fill({ wch: 15 });
-        worksheet['!cols'] = colWidths;
-        workbook.Sheets[sheetName] = worksheet;
-        console.log(`기존 시트 "${sheetName}"에 데이터 추가: ${excelData.length}개 매물 (총 ${combinedData.length}개)`);
-      } else {
-        const worksheet = XLSX.utils.json_to_sheet(excelData);
-        const colWidths = Array(Object.keys(excelData[0]).length).fill({ wch: 15 });
-        worksheet['!cols'] = colWidths;
-        XLSX.utils.book_append_sheet(workbook, worksheet, sheetName);
-        console.log(`새 시트 "${sheetName}" 생성: ${excelData.length}개 매물`);
-      }
+      // 새 시트 생성
+      const worksheet = XLSX.utils.json_to_sheet(excelData);
+      const colWidths = Array(Object.keys(excelData[0]).length).fill({ wch: 15 });
+      worksheet['!cols'] = colWidths;
+      XLSX.utils.book_append_sheet(workbook, worksheet, sheetName);
+      console.log(`시트 "${sheetName}" 생성: ${excelData.length}개 매물`);
     }
     
     // 워크북이 비어있으면 기본 시트 생성
@@ -346,13 +323,30 @@ class DirectAPICrawler {
       XLSX.utils.book_append_sheet(workbook, worksheet, '알림');
     }
     
-    // 엑셀 파일 저장
-    XLSX.writeFile(workbook, fileName);
-    console.log(`엑셀 파일이 저장되었습니다: ${fileName}`);
+    // 엑셀 파일을 버퍼로 변환 (파일 시스템에 저장하지 않음)
+    const buffer = XLSX.write(workbook, { type: 'buffer', bookType: 'xlsx' });
+    console.log(`엑셀 버퍼 생성 완료: ${fileName}`);
     console.log(`총 시트 수: ${workbook.SheetNames.length}개`);
     console.log(`시트 목록: ${workbook.SheetNames.join(', ')}`);
     
-    return fileName;
+    return { buffer, fileName };
+  }
+  
+  // CLI용: 파일 시스템에 저장하는 함수
+  async saveToExcel(complexNo, complexName = '') {
+    const { buffer, fileName } = await this.createExcelBuffer(complexNo, complexName);
+    
+    //  폴더 생성
+    const downloadDir = path.join(process.cwd(), 'downLoad');
+    if (!fs.existsSync(downloadDir)) {
+      fs.mkdirSync(downloadDir, { recursive: true });
+    }
+    
+    const filePath = path.join(downloadDir, fileName);
+    fs.writeFileSync(filePath, buffer);
+    console.log(`엑셀 파일이 저장되었습니다: ${filePath}`);
+    
+    return filePath;
   }
 }
 

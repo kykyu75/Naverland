@@ -4,7 +4,8 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 import fs from 'fs';
 import { exec } from 'child_process';
-import NaverLandCrawler from './crawler.js';
+import https from 'https';
+import http from 'http';
 import DirectAPICrawler from './direct-api-crawler.js';
 
 const __filename = fileURLToPath(import.meta.url);
@@ -33,7 +34,7 @@ app.get('/', (req, res) => {
 // 크롤링 시작 API
 app.post('/api/crawl', async (req, res) => {
   try {
-    const { complexNo, complexName, method = 'playwright' } = req.body;
+    const { complexNo, complexName } = req.body;
     
     if (!complexNo) {
       return res.status(400).json({ 
@@ -42,50 +43,30 @@ app.post('/api/crawl', async (req, res) => {
       });
     }
 
-    console.log(`크롤링 시작: 단지번호 ${complexNo}, 방법: ${method}`);
+    console.log(`크롤링 시작: 단지번호 ${complexNo}`);
     
-    let result;
+    // Direct API만 사용
+    const apiCrawler = new DirectAPICrawler();
+    const data = await apiCrawler.crawlDirectAPI(complexNo);
     
-    if (method === 'direct-api') {
-      // 직접 API 요청 방법
-      const apiCrawler = new DirectAPICrawler();
-      const data = await apiCrawler.crawlDirectAPI(complexNo);
-      
-      // 수집된 매물 데이터 추출
-      const articles = [];
-      for (const apiData of data) {
-        if (apiData.data && apiData.data.articleList && Array.isArray(apiData.data.articleList)) {
-          articles.push(...apiData.data.articleList);
-        }
+    // 수집된 매물 데이터 추출
+    const articles = [];
+    for (const apiData of data) {
+      if (apiData.data && apiData.data.articleList && Array.isArray(apiData.data.articleList)) {
+        articles.push(...apiData.data.articleList);
       }
-      
-      const fileName = await apiCrawler.saveToExcel(complexNo, complexName);
-      
-      result = {
-        success: true,
-        method: 'direct-api',
-        dataCount: articles.length,
-        fileName: fileName,
-        articles: articles, // 실제 매물 데이터 전달
-        message: '직접 API 크롤링이 완료되었습니다.'
-      };
-    } else {
-      // Playwright 브라우저 방법
-      const crawler = new NaverLandCrawler();
-      const crawlResult = await crawler.crawl(
-        `https://new.land.naver.com/complexes/${complexNo}`, 
-        { complexNo, complexName, address: '' }
-      );
-      
-      result = {
-        success: crawlResult.success,
-        method: 'playwright',
-        dataCount: crawlResult.dataCount || 0,
-        fileName: crawlResult.fileName || '',
-        message: crawlResult.success ? 'Playwright 크롤링이 완료되었습니다.' : '크롤링 중 오류가 발생했습니다.',
-        error: crawlResult.error
-      };
     }
+    
+    // 파일은 생성하지 않고 데이터만 반환
+    const result = {
+      success: true,
+      method: 'direct-api',
+      dataCount: articles.length,
+      complexNo: complexNo,
+      complexName: complexName || '',
+      articles: articles,
+      message: 'Direct API 크롤링이 완료되었습니다.'
+    };
     
     res.json(result);
     
@@ -98,30 +79,20 @@ app.post('/api/crawl', async (req, res) => {
   }
 });
 
-// 파일 다운로드 API
-app.get('/api/download/:filename', (req, res) => {
-  const filename = req.params.filename;
-  const filePath = path.join(__dirname, filename);
-  
-  if (fs.existsSync(filePath)) {
-    res.download(filePath, filename, (err) => {
-      if (err) {
-        console.error('파일 다운로드 오류:', err);
-        res.status(500).json({ error: '파일 다운로드 중 오류가 발생했습니다.' });
-      }
-    });
-  } else {
-    res.status(404).json({ error: '파일을 찾을 수 없습니다.' });
-  }
-});
-
 // 생성된 엑셀 파일 목록 조회 API
 app.get('/api/files', (req, res) => {
   try {
-    const files = fs.readdirSync(__dirname)
+    const downloadDir = path.join(__dirname, 'downLoad');
+    
+    // downLoad 폴더가 없으면 빈 배열 반환
+    if (!fs.existsSync(downloadDir)) {
+      return res.json({ files: [] });
+    }
+    
+    const files = fs.readdirSync(downloadDir)
       .filter(file => file.endsWith('.xlsx'))
       .map(file => {
-        const stats = fs.statSync(path.join(__dirname, file));
+        const stats = fs.statSync(path.join(downloadDir, file));
         return {
           name: file,
           size: stats.size,
@@ -137,7 +108,7 @@ app.get('/api/files', (req, res) => {
   }
 });
 
-// 키워드 검색 API
+// Direct API 방식으로 키워드 검색 (크롤링과 동일한 방식 사용)
 app.post('/api/search-keyword', async (req, res) => {
   try {
     const { keyword } = req.body;
@@ -146,105 +117,133 @@ app.post('/api/search-keyword', async (req, res) => {
       return res.status(400).json({ error: '검색 키워드를 입력해주세요.' });
     }
 
-    console.log(`키워드 검색 시작: ${keyword}`);
+    console.log(`키워드 검색 시작 (Direct API): ${keyword}`);
     
-    // 네이버 부동산 검색 API 호출
+    // 네이버 부동산 검색 API 호출 (모든 페이지 수집)
     const searchUrl = 'https://new.land.naver.com/api/search';
-    const params = {
-      keyword: keyword.trim(),
-      page: '1'
-    };
-
-    const cookies = {
-      'NNB': 'PWIJR7Q3QCQGO',
-      'nstore_session': '4Y8GSqcQwQkpJcWHlbbNO5yj',
-      'nstore_pagesession': 'iISgglqlKcnNPlsMiwh-038404',
-      'ASID': '77c9d40200000194ddcdc61300000052',
-      'NV_WETR_LAST_ACCESS_RGN_M': '"MDE3MzAzNTA="',
-      'NV_WETR_LOCATION_RGN_M': '"MDE3MzAzNTA="',
-      'tooltipDisplayed': 'true',
-      'NFS': '2',
-      '_ga': 'GA1.1.2049030217.1751446160',
-      '_ga_J5CZVNJNQP': 'GS2.1.s1751446159$o1$g0$t1751446161$j58$l0$h0',
-      '_ga_8P4PY65YZ2': 'GS2.1.s1752184953$o2$g0$t1752184953$j60$l0$h0',
-      '_fbp': 'fb.1.1757040484570.492209081843487792',
-      '_fwb': '174ECA6WQEO9TFCamGcqEuE.1757915781695',
-      'nhn.realestate.article.rlet_type_cd': 'A01',
-      'ab.storage.userId.7d7bb94a-f465-48e5-bec1-35db97daf128': 'g%3A2nEoC%7Ce%3Aundefined%7Cc%3A1760417921823%7Cl%3A1760417921825',
-      'ab.storage.deviceId.7d7bb94a-f465-48e5-bec1-35db97daf128': 'g%3A7eba4c9e-9499-a47c-0343-f9d2a6033e63%7Ce%3Aundefined%7Cc%3A1760417921826%7Cl%3A1760417921826',
-      'ab.storage.sessionId.7d7bb94a-f465-48e5-bec1-35db97daf128': 'g%3A9bb2b82f-0509-aeb6-e59a-4cf6d46c5e69%7Ce%3A1760419726417%7Cc%3A1760417921824%7Cl%3A1760417926417',
-      'NAC': 'gasMBww2e9Q6A',
-      'nhn.realestate.article.trade_type_cd': '""',
-      'nhn.realestate.article.ipaddress_city': '1100000000',
-      'nid_inf': '1549599859',
-      'NID_AUT': 'NIh+3TQTyiOeFw2E0q4q6xdFbbCGq4eOxjB78zD8+hK5i538oZ38koRiDMk+KrtX',
-      'SRT30': '1760657846',
-      'NACT': '1',
-      'page_uid': 'jnbMydqo15wssk/V/7Rssssstrs-084913',
-      'NID_SES': 'AAABu+IQEjg6wTIZtuOVfI11mjb6eJU0EG/v3JJ3kgsJjUJ0n12PaWNEggrBCSVNEUz3DjzuA5qwLwY9iECOO7wxbhCS2i+0lXT+EhpR/2FvArH8KU0Rq9yBJ/30Io/KTUXZMStaF3/RWKRbNq8Iwndb0oWXEIgNDg+M4Zu7sVLZYGMvvdjK8s6GP6krwFKDRcO8cmjhamWocNrVJ8xT0MQEehmt+s9635H5TAJWsZJWW+8PiF0lqMHKj85TdfzsqEEbz8nGHcKFw4gxvbGqU9LWGgeM9GJeml73RHfGEKEKWBXny4Pb2IWCgcRgL0wZGDfemqEMbRRoweI9OXitIV7fM85EnEucK87yZheTJgjYqQjh3+APxq4ARzG9Xqpcj00dWrjsfRGvnXrk8ET6mqg2GfkOLzxVWhCBT1l2x41TgjSogVSz3pdcYKTae5SMBFIZbJntZ1VOyAt6/Yg1shrLJaC+s5O4KwWXFBiHMmeQz7bXKjg/QBdTT2pFVjEiYfcwPPmbQ8x70cFn+Zo7sLAySH6GGugFWRmrXuoVuhVAzj2iSoi0/jR+w5IGjvngINKSWAqDBTfEWG+wlPsM53WcSiw=',
-      'landHomeFlashUseYn': 'Y',
-      'realestate.beta.lastclick.cortar': '1165000000',
-      'SRT5': '1760664591',
-      'REALESTATE': 'Fri%20Oct%2017%202025%2010%3A31%3A53%20GMT%2B0900%20(Korean%20Standard%20Time)',
-      'PROP_TEST_KEY': '1760664713780.d3fbd7869377c2773b71b16398279f2e436deff2346c2e14d07e8ed38cafa0de',
-      'PROP_TEST_ID': 'c26f8cf8e11c3d5adcbbaf64d7e5a76b02f357aefcf7d068fdb8d1f1c235e096',
-      'BUC': '4KbP14X_aDiUrSfu8tBgqiYHb1xPY5W6rchoK-TwhiU='
-    };
-
+    const apiCrawler = new DirectAPICrawler();
+    
+    // 크롤링과 동일한 헤더 사용
     const headers = {
-      'Accept': '*/*',
-      'Accept-Language': 'ko-KR,ko;q=0.9,en-US;q=0.8,en;q=0.7',
-      'Connection': 'keep-alive',
-      'Referer': 'https://new.land.naver.com/complexes/8781?ms=35.850881,128.52678,17&a=APT:PRE:ABYG:JGC&e=RETAIL&ad=true',
-      'Sec-Fetch-Dest': 'empty',
-      'Sec-Fetch-Mode': 'cors',
-      'Sec-Fetch-Site': 'same-origin',
-      'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/141.0.0.0 Safari/537.36',
-      'authorization': 'Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6IlJFQUxFU1RBVEUiLCJpYXQiOjE3NjA2NjQ3MTMsImV4cCI6MTc2MDY3NTUxM30.fcJaGfCa8EFFNWlqZN-temvbjfWl2CVhc5xjoO1x5-M',
+      'accept': '*/*',
+      'accept-language': 'ko-KR,ko;q=0.9,en-US;q=0.8,en;q=0.7',
+      'authorization': 'Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6IlJFQUxFU1RBVEUiLCJpYXQiOjE3NjA1Nzc1MzUsImV4cCI6MTc2MDU4ODMzNX0.Q1VRZmhsAmblSgsNf3SYW3l1_18qU11uAkaDndSC5pQ',
+      'priority': 'u=1, i',
+      'referer': 'https://new.land.naver.com/',
       'sec-ch-ua': '"Google Chrome";v="141", "Not?A_Brand";v="8", "Chromium";v="141"',
       'sec-ch-ua-mobile': '?0',
-      'sec-ch-ua-platform': '"Windows"'
+      'sec-ch-ua-platform': '"Windows"',
+      'sec-fetch-dest': 'empty',
+      'sec-fetch-mode': 'cors',
+      'sec-fetch-site': 'same-origin',
+      'user-agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/141.0.0.0 Safari/537.36'
     };
-
+    
     const querystring = await import('querystring');
     
-    const queryString = querystring.stringify(params);
-    const fullUrl = `${searchUrl}?${queryString}`;
+    // 모든 페이지의 데이터를 수집 (최대 10페이지)
+    const MAX_PAGES = 5;
+    let allComplexes = [];
+    let allRegions = [];
+    let page = 1;
+    let hasMoreData = true;
+    let totalCount = 0;
+    let limitReached = false;
     
-    console.log(`검색 URL: ${fullUrl}`);
-
-    // Node.js에서 HTTPS 요청 시 SSL 인증서 검증 비활성화
-    const httpsModule = await import('https');
-    
-    // 환경 변수로 SSL 검증 비활성화
-    process.env.NODE_TLS_REJECT_UNAUTHORIZED = '0';
-    
-    const response = await fetch(fullUrl, {
-      method: 'GET',
-      headers: {
-        ...headers,
-        'Cookie': Object.entries(cookies).map(([key, value]) => `${key}=${value}`).join('; ')
+    while (hasMoreData && page <= MAX_PAGES) {
+      const params = {
+        keyword: keyword.trim(),
+        page: page.toString()
+      };
+      
+      const queryString = querystring.stringify(params);
+      const fullUrl = `${searchUrl}?${queryString}`;
+      
+      console.log(`검색 페이지 ${page}: ${fullUrl}`);
+      
+      const response = await apiCrawler.makeRequest(fullUrl, headers);
+      
+      if (!response.success) {
+        console.error(`검색 실패 (페이지 ${page}): ${response.error} (상태: ${response.status})`);
+        
+        // 첫 페이지 실패 시 에러 반환
+        if (page === 1) {
+          if (response.status === 404) {
+            return res.status(404).json({ 
+              success: false, 
+              error: '검색 API 엔드포인트를 찾을 수 없습니다. 네이버 부동산 API가 변경되었을 수 있습니다.',
+              details: response.error,
+              suggestion: '단지번호를 직접 입력하여 크롤링하시거나, 브라우저에서 네이버 부동산을 열어 단지번호를 확인해주세요.'
+            });
+          }
+          
+          if (response.status === 429) {
+            return res.status(429).json({ 
+              success: false, 
+              error: '네이버 API 요청 제한에 걸렸습니다. 잠시 후 다시 시도해주세요.',
+              details: response.error
+            });
+          }
+          
+          return res.status(response.status || 500).json({ 
+            success: false, 
+            error: '키워드 검색 중 오류가 발생했습니다.',
+            details: response.error,
+            status: response.status
+          });
+        }
+        
+        // 중간 페이지 실패 시 수집된 데이터 반환
+        console.log(`페이지 ${page} 실패, 수집된 데이터 반환`);
+        break;
       }
-    });
-    
-    // 환경 변수 복원
-    process.env.NODE_TLS_REJECT_UNAUTHORIZED = '1';
-
-    if (!response.ok) {
-      throw new Error(`HTTP error! status: ${response.status}`);
+      
+      const data = response.data;
+      
+      // 첫 페이지에서 totalCount 저장
+      if (page === 1) {
+        totalCount = data.totalCount || 0;
+      }
+      
+      // 데이터 추가
+      if (data.complexes && Array.isArray(data.complexes)) {
+        allComplexes.push(...data.complexes);
+        console.log(`페이지 ${page}: ${data.complexes.length}개 단지 수집 (누적: ${allComplexes.length}개)`);
+      }
+      
+      if (data.regions && Array.isArray(data.regions) && page === 1) {
+        allRegions = data.regions;
+      }
+      
+      // 더 이상 데이터가 없거나, 수집된 데이터가 없으면 종료
+      hasMoreData = data.isMoreData === true && data.complexes && data.complexes.length > 0;
+      
+      if (hasMoreData) {
+        // 10페이지 도달 체크
+        if (page >= MAX_PAGES) {
+          limitReached = true;
+          console.log(`⚠️ 최대 페이지 수(${MAX_PAGES}페이지) 도달`);
+          break;
+        }
+        
+        page++;
+        // API 부하 방지를 위한 짧은 대기
+        await new Promise(resolve => setTimeout(resolve, 100));
+      }
     }
-
-    const data = await response.json();
     
-    console.log(`검색 완료: ${data.complexes?.length || 0}개 단지 발견`);
+    console.log(`검색 완료: 총 ${allComplexes.length}개 단지 수집 (${page}페이지)`);
     
     res.json({
       success: true,
       keyword: keyword,
-      totalCount: data.totalCount || 0,
-      complexes: data.complexes || [],
-      regions: data.regions || [],
-      isMoreData: data.isMoreData || false
+      totalCount: totalCount,
+      complexes: allComplexes,
+      regions: allRegions,
+      isMoreData: limitReached || hasMoreData,
+      totalPages: page,
+      limitReached: limitReached,
+      maxPages: MAX_PAGES
     });
 
   } catch (error) {
@@ -252,7 +251,7 @@ app.post('/api/search-keyword', async (req, res) => {
     res.status(500).json({ 
       success: false, 
       error: '키워드 검색 중 오류가 발생했습니다.',
-      details: error.message 
+      details: error.message
     });
   }
 });
@@ -260,58 +259,41 @@ app.post('/api/search-keyword', async (req, res) => {
 // 디렉토리 열기 API
 app.post('/api/open-directory', (req, res) => {
   try {
-    const currentDir = __dirname;
-    console.log(`현재 디렉토리: ${currentDir}`);
+    const downloadDir = path.join(__dirname, 'downLoad');
+    
+    // downLoad 폴더가 없으면 생성
+    if (!fs.existsSync(downloadDir)) {
+      fs.mkdirSync(downloadDir, { recursive: true });
+    }
+    
+    console.log(`다운로드 폴더: ${downloadDir}`);
     
     // Windows에서 폴더 열기
     if (process.platform === 'win32') {
-      // 여러 방법으로 시도
-      const commands = [
-        `explorer "${currentDir}"`,
-        `start "" "${currentDir}"`,
-        `cmd /c start "" "${currentDir}"`
-      ];
-      
-      let success = false;
-      let lastError = null;
-      
-      const tryCommand = (index) => {
-        if (index >= commands.length) {
-          console.error('모든 폴더 열기 명령이 실패했습니다:', lastError);
-          res.status(500).json({ error: '폴더를 열 수 없습니다. 수동으로 프로젝트 폴더를 확인해주세요.' });
-          return;
-        }
-        
-        exec(commands[index], { cwd: currentDir }, (error, stdout, stderr) => {
-          if (error) {
-            console.log(`명령 실패: ${commands[index]}`, error.message);
-            lastError = error;
-            tryCommand(index + 1);
-          } else {
-            console.log(`폴더가 성공적으로 열렸습니다: ${currentDir}`);
-            res.json({ success: true, message: '폴더가 열렸습니다.', path: currentDir });
-          }
-        });
-      };
-      
-      tryCommand(0);
-      
-    } else if (process.platform === 'darwin') {
-      exec(`open "${currentDir}"`, (error) => {
+      exec(`explorer "${downloadDir}"`, (error) => {
         if (error) {
           console.error('폴더 열기 오류:', error);
           res.status(500).json({ error: '폴더를 열 수 없습니다.' });
         } else {
-          res.json({ success: true, message: '폴더가 열렸습니다.', path: currentDir });
+          res.json({ success: true, message: '폴더가 열렸습니다.', path: downloadDir });
+        }
+      });
+    } else if (process.platform === 'darwin') {
+      exec(`open "${downloadDir}"`, (error) => {
+        if (error) {
+          console.error('폴더 열기 오류:', error);
+          res.status(500).json({ error: '폴더를 열 수 없습니다.' });
+        } else {
+          res.json({ success: true, message: '폴더가 열렸습니다.', path: downloadDir });
         }
       });
     } else {
-      exec(`xdg-open "${currentDir}"`, (error) => {
+      exec(`xdg-open "${downloadDir}"`, (error) => {
         if (error) {
           console.error('폴더 열기 오류:', error);
           res.status(500).json({ error: '폴더를 열 수 없습니다.' });
         } else {
-          res.json({ success: true, message: '폴더가 열렸습니다.', path: currentDir });
+          res.json({ success: true, message: '폴더가 열렸습니다.', path: downloadDir });
         }
       });
     }
@@ -322,10 +304,11 @@ app.post('/api/open-directory', (req, res) => {
 });
 
 // 서버 시작
-const server = app.listen(PORT, () => {
+app.listen(PORT, () => {
   console.log(`🌐 네이버 부동산 크롤러 웹 서버가 시작되었습니다!`);
   console.log(`📱 브라우저에서 http://localhost:${PORT} 를 열어주세요`);
   console.log(`⏹️  서버를 중지하려면 Ctrl+C를 누르세요`);
+  console.log(`\n💡 Direct API 방식만 사용됩니다.`);
 });
 
 export default app;
